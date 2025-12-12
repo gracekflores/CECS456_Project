@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras import layers, models, metrics
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -58,5 +59,55 @@ def build_model(input_shape=(128,128,3)):
     return model
 
 if __name__ == "__cnn_model__":
+    # Define image dimensions and batch size
+    IMG_WIDTH, IMG_HEIGHT = 128, 128
+    BATCH_SIZE = 32
+    # Set the paths to your main data directories
+    TRAIN_DIR = 'chest_xray\\train'
+    TEST_DIR = 'chest_xray\\test'
+    VALIDATION_DIR = 'chest_xray\\val'
+    
+    # 1. Create data generators
+    train_datagen = ImageDataGenerator(
+        rescale=1./255,          # Normalize pixel values
+        rotation_range=40,       # Data augmentation
+        width_shift_range=0.2,
+        height_shift_range=0.2,
+        shear_range=0.2,
+        zoom_range=0.2,
+        horizontal_flip=True,
+        fill_mode='nearest'
+    )
+
+    test_datagen = ImageDataGenerator(rescale=1./255) # Only normalization for testing
+
+    validation_datagen = ImageDataGenerator(rescale=1./255) # Only normalization for validation
+
+    # 2. Load data from directories
+    train_generator = train_datagen.flow_from_directory(
+        TRAIN_DIR,
+        target_size=(IMG_WIDTH, IMG_HEIGHT),
+        batch_size=BATCH_SIZE,
+        class_mode='binary'
+    )
+
+    validation_generator = validation_datagen.flow_from_directory(
+        VALIDATION_DIR,
+        target_size=(IMG_WIDTH, IMG_HEIGHT),
+        batch_size=BATCH_SIZE,
+        class_mode='binary'
+    )
+
+    test_generator = test_datagen.flow_from_directory(
+        TEST_DIR,
+        target_size=(IMG_WIDTH, IMG_HEIGHT),
+        batch_size=BATCH_SIZE,
+        class_mode='binary',
+        shuffle=False
+    )
+
+    train_images, test_images = train_generator, test_generator
+    validation_images = validation_generator
+
     model = build_model()
     model.summary()
