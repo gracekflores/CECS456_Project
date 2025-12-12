@@ -1,13 +1,15 @@
 import tensorflow as tf
 from tensorflow.keras import layers, models, metrics
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from sklearn.metrics import confusion_matrix
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve, auc, confusion_matrix
+import seaborn as sns
 
+# --- Class Activation Map (CAM) ---
 def get_cam(model, image, last_conv_layer_name):
     grad_model = models.Model(
-        [model.inputs], 
+        [model.inputs],
         [model.get_layer(last_conv_layer_name).output, model.output]
     )
 
@@ -26,7 +28,7 @@ def get_cam(model, image, last_conv_layer_name):
     plt.imshow(cam, cmap='jet', alpha=0.5)
     plt.show()
 
-
+# --- Build CNN Model ---
 def build_model(input_shape=(128,128,3)):
     model = models.Sequential([
         layers.Conv2D(32, (3,3), padding='same', input_shape=input_shape),
@@ -52,27 +54,52 @@ def build_model(input_shape=(128,128,3)):
         layers.Dense(1, activation='sigmoid')
     ])
     
-    model.compile(optimizer='adam', loss='binary_crossentropy', 
-        metrics=['accuracy', metrics.Precision(),
-        metrics.Recall(),
-        metrics.AUC(name='auc_roc')])
-    
+    model.compile(
+        optimizer='adam',
+        loss='binary_crossentropy',
+        metrics=['accuracy',
+                 metrics.Precision(),
+                 metrics.Recall(),
+                 metrics.AUC(name='auc_roc')]
+    )
     return model
 
+# --- Plot Training Curves ---
+def plot_training_curves(history):
+    plt.figure(figsize=(12,5))
+    # Accuracy
+    plt.subplot(1,2,1)
+    plt.plot(history.history['accuracy'], label='Train Accuracy')
+    plt.plot(history.history['val_accuracy'], label='Val Accuracy')
+    plt.title('Model Accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.legend()
+    # Loss
+    plt.subplot(1,2,2)
+    plt.plot(history.history['loss'], label='Train Loss')
+    plt.plot(history.history['val_loss'], label='Val Loss')
+    plt.title('Model Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.show()
+
+# --- Main Execution ---
 if __name__ == "__main__":
     # Defining image dimensions and batch size
     IMG_WIDTH, IMG_HEIGHT = 128, 128
     BATCH_SIZE = 32
 
-    # Setting the paths to the main data directories
-    TRAIN_DIR = 'chest_xray\\train'
-    TEST_DIR = 'chest_xray\\test'
-    VALIDATION_DIR = 'chest_xray\\val'
+    # Paths to data directories
+    TRAIN_DIR = 'chest_xray/train'
+    TEST_DIR = 'chest_xray/test'
+    VALIDATION_DIR = 'chest_xray/val'
     
-    # Creating data generators
+    # Data generators
     train_datagen = ImageDataGenerator(
-        rescale=1./255,          # Normalize pixel values
-        rotation_range=40,       # Data augmentation
+        rescale=1./255,
+        rotation_range=40,
         width_shift_range=0.2,
         height_shift_range=0.2,
         shear_range=0.2,
@@ -81,11 +108,10 @@ if __name__ == "__main__":
         fill_mode='nearest'
     )
 
-    test_datagen = ImageDataGenerator(rescale=1./255) # Only normalization for testing
+    test_datagen = ImageDataGenerator(rescale=1./255)
+    validation_datagen = ImageDataGenerator(rescale=1./255)
 
-    validation_datagen = ImageDataGenerator(rescale=1./255) # Only normalization for validation
-
-    # Loading data from directories
+    # Loading data
     train_generator = train_datagen.flow_from_directory(
         TRAIN_DIR,
         target_size=(IMG_WIDTH, IMG_HEIGHT),
@@ -108,30 +134,59 @@ if __name__ == "__main__":
         shuffle=False
     )
 
-    train_images, test_images = train_generator, test_generator
-    validation_images = validation_generator
-
+    # Building and training model
     model = build_model()
     model.summary()
 
-    # Training the model
     history = model.fit(
-        train_images,
+        train_generator,
         epochs=20,
-        validation_data=validation_images,
-        validation_steps=len(validation_images)
+        validation_data=validation_generator
     )
 
-    # Evaluating the model
-    results = model.evaluate(test_images)
-    print(dict(zip(model.metrics_names, results)))
+    # Evaluating on test set
+    test_loss, test_acc, test_precision, test_recall, test_auc = model.evaluate(test_generator)
+    print(f"Test Accuracy: {test_acc:.4f}")
+    print(f"Test Precision: {test_precision:.4f}")
+    print(f"Test Recall: {test_recall:.4f}")
+    print(f"Test AUC: {test_auc:.4f}")
 
-    # Testing the model
-    pred_probs = model.predict(test_images)
+    # Predictions
+    pred_probs = model.predict(test_generator)
     pred_labels = (pred_probs > 0.5).astype(int)
-    true_labels = test_images.classes
+    true_labels = test_generator.classes
 
-    # Generating confusion matrix
-    from sklearn.metrics import confusion_matrix
+    # Training curves
+    plot_training_curves(history)
+
+    # ROC curve
+    fpr, tpr, thresholds = roc_curve(true_labels, pred_probs)
+    roc_auc = auc(fpr, tpr)
+    plt.figure(figsize=(6,6))
+    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
+    plt.plot([0,1], [0,1], color='navy', lw=2, linestyle='--')
+    plt.title('Receiver Operating Characteristic')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.legend(loc="lower right")
+    plt.show()
+
+    # Confusion matrix
     cm = confusion_matrix(true_labels, pred_labels)
-    print(cm)
+    plt.figure(figsize=(6,5))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=['NORMAL','PNEUMONIA'],
+                yticklabels=['NORMAL','PNEUMONIA'])
+    plt.title('Confusion Matrix')
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.show()
+
+    # Results table template
+    print("\nResults Table (for report):")
+    print("| Metric     | Value |")
+    print("|------------|-------|")
+    print(f"| Accuracy   | {test_acc:.4f} |")
+    print(f"| Precision  | {test_precision:.4f} |")
+    print(f"| Recall     | {test_recall:.4f} |")
+    print(f"| AUC (ROC)  | {test_auc:.4f} |")
