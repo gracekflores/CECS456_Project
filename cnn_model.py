@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras import layers, models
+from tensorflow.keras import layers, models, metrics
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -50,7 +50,11 @@ def build_model(input_shape=(128,128,3)):
         layers.Dense(1, activation='sigmoid')
     ])
     
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer='adam', loss='binary_crossentropy', 
+        metrics=['accuracy', metrics.Precision(),
+        metrics.Recall(),
+        metrics.AUC(name='auc_roc')])
+    
     return model
 
 if __name__ == "__cnn_model__":
