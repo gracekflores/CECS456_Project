@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras import layers, models, metrics
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from sklearn.metrics import confusion_matrix
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -58,16 +59,17 @@ def build_model(input_shape=(128,128,3)):
     
     return model
 
-if __name__ == "__cnn_model__":
-    # Define image dimensions and batch size
+if __name__ == "__main__":
+    # Defining image dimensions and batch size
     IMG_WIDTH, IMG_HEIGHT = 128, 128
     BATCH_SIZE = 32
-    # Set the paths to your main data directories
+
+    # Setting the paths to the main data directories
     TRAIN_DIR = 'chest_xray\\train'
     TEST_DIR = 'chest_xray\\test'
     VALIDATION_DIR = 'chest_xray\\val'
     
-    # 1. Create data generators
+    # Creating data generators
     train_datagen = ImageDataGenerator(
         rescale=1./255,          # Normalize pixel values
         rotation_range=40,       # Data augmentation
@@ -83,7 +85,7 @@ if __name__ == "__cnn_model__":
 
     validation_datagen = ImageDataGenerator(rescale=1./255) # Only normalization for validation
 
-    # 2. Load data from directories
+    # Loading data from directories
     train_generator = train_datagen.flow_from_directory(
         TRAIN_DIR,
         target_size=(IMG_WIDTH, IMG_HEIGHT),
@@ -111,3 +113,25 @@ if __name__ == "__cnn_model__":
 
     model = build_model()
     model.summary()
+
+    # Training the model
+    history = model.fit(
+        train_images,
+        epochs=20,
+        validation_data=validation_images,
+        validation_steps=len(validation_images)
+    )
+
+    # Evaluating the model
+    results = model.evaluate(test_images)
+    print(dict(zip(model.metrics_names, results)))
+
+    # Testing the model
+    pred_probs = model.predict(test_images)
+    pred_labels = (pred_probs > 0.5).astype(int)
+    true_labels = test_images.classes
+
+    # Generating confusion matrix
+    from sklearn.metrics import confusion_matrix
+    cm = confusion_matrix(true_labels, pred_labels)
+    print(cm)
