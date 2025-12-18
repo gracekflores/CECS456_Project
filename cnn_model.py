@@ -5,6 +5,27 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc, confusion_matrix
 import seaborn as sns
+import time
+from tensorflow.keras.callbacks import Callback
+
+# -- Timer Callback --- 
+class TimingCallback(Callback):
+    def on_train_begin(self, logs=None):
+        self.times = []
+        self.start_time = time.time()
+
+    def on_epoch_begin(self, epoch, logs=None):
+        self.epoch_start = time.time()
+
+    def on_epoch_end(self, epoch, logs=None):
+        epoch_time = time.time() - self.epoch_start
+        self.times.append(epoch_time)
+        print(f"Epoch {epoch+1} took {epoch_time:.2f} seconds")
+
+    def on_train_end(self, logs=None):
+        total_time = time.time() - self.start_time
+        print(f"\nTotal training time: {total_time:.2f} seconds")
+
 
 # --- Class Activation Map (CAM) ---
 def get_cam(model, image, last_conv_layer_name):
@@ -138,10 +159,12 @@ if __name__ == "__main__":
     model = build_model()
     model.summary()
 
+    timing_callback = TimingCallback()
     history = model.fit(
         train_generator,
         epochs=20,
-        validation_data=validation_generator
+        validation_data=validation_generator,
+        callbacks=[timing_callback]
     )
 
     # Evaluating on test set
